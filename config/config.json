@@ -1,0 +1,33 @@
+{
+  "app": {
+    "title": "FatCheck Kiosk",
+    "window_width": 800,
+    "window_height": 600,
+    "fullscreen": true
+  },
+  "theme": {
+    "neutral-600": "#525252",
+    "zinc-950": "#09090b",
+    "zinc-100": "#f4f4f5",
+    "neutral-800": "#262626",
+    "red-600": "#dc2626",
+    "red-800": "#991b1b",
+    "green-600": "#16a34a",
+    "emerald-600": "#059669",
+    "blue-700": "#1d4ed8",
+    "yellow-400": "#facc15",
+    "heading": "Arial Black",
+    "description": "Verdana"
+  },
+  "text-size": {
+    "xl": "40",
+    "l": "35",
+    "md": "28",
+    "sm": "24",
+    "xsm": "12"
+  },
+  "camera": {
+    "resolution_width": 1980,
+    "resolution_height": 1080
+  }
+}
