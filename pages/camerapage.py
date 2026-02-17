@@ -9,6 +9,7 @@ from backend.gender_detector import GenderHeuristicPredictor
 from backend.pose_analyzer import PoseAnalyzer
 from backend.bodyfat_analyzer import BodyFatAnalyzer
 from backend.util.report_generator import PDFReportGenerator
+from pages.resultpage import ResultPage
 
 class CameraPage:
     def __init__(self, root, theme, camera_config):
@@ -24,7 +25,6 @@ class CameraPage:
         self.pose_analyzer = PoseAnalyzer()
 
         # --- Frames ---
-        # Make camera 50% width, form 50% width
         camera_width = screen_width // 2
         form_width = screen_width - camera_width
 
@@ -40,26 +40,17 @@ class CameraPage:
 
         # --- Video capture ---
         self.cap = cv2.VideoCapture(0)
-
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1280)
         self.cap.set(cv2.CAP_PROP_FPS, 60)
-
-        # Reduce internal camera buffer (important for smooth motion)
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        # Get actual FPS camera accepted
         self.cam_fps = self.cap.get(cv2.CAP_PROP_FPS)
-
         if not self.cam_fps or self.cam_fps < 1:
-            self.cam_fps = 30  # safe fallback
-
+            self.cam_fps = 30
         print(f"[CameraPage] Running at {self.cam_fps} FPS")
 
-        # Calculate proper delay
         self.frame_delay = int(1000 / self.cam_fps)
-
-
         self.imgtk = None
         self.canvas_image = self.canvas.create_image(0, 0, anchor="center")
         self.canvas.bind("<Configure>", self.on_canvas_resize)
@@ -110,6 +101,7 @@ class CameraPage:
         self.capture_btn.config_state("disabled")  # initially disabled
 
         # --- Start video loop ---
+        self.update_loop_id = None
         self.update_frame()
 
     # ------------------------------
@@ -122,101 +114,109 @@ class CameraPage:
     def update_frame(self):
         if self.cap.isOpened():
             ret, frame = self.cap.read()
-
             if ret:
                 self.last_frame_full_res = frame.copy()
-
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 img = ImageTk.PhotoImage(image=Image.fromarray(frame_rgb))
-
                 self.imgtk = img
                 self.canvas.itemconfig(self.canvas_image, image=self.imgtk)
-
-        self.root.after(self.frame_delay, self.update_frame)
-
+        self.update_loop_id = self.root.after(self.frame_delay, self.update_frame)
 
     # ------------------------------
     def capture_image(self):
-        if self.last_frame_full_res is not None:
-            raw_image = self.last_frame_full_res.copy()
+        if self.last_frame_full_res is None:
+            return
 
-            # --- Pose analysis ---
-            annotated_image, measurements, landmarks = self.pose_analyzer.analyze_image(raw_image)
+        # Stop camera loop
+        if self.update_loop_id:
+            self.root.after_cancel(self.update_loop_id)
+        if self.cap.isOpened():
+            self.cap.release()
 
-            if not measurements:
-                print("[CameraPage] No pose detected. Skipping capture.")
-                return
+        raw_image = self.last_frame_full_res.copy()
 
-            # --- Predict gender using heuristics ---
-            predictor = GenderHeuristicPredictor()
-            gender = predictor.predict(measurements)
+        # --- Pose analysis ---
+        annotated_image, measurements, landmarks = self.pose_analyzer.analyze_image(raw_image)
+        if not measurements:
+            print("[CameraPage] No pose detected. Skipping capture.")
+            return
 
-            # --- Estimate BF% using BodyFatAnalyzer ---
-            from backend.bodyfat_analyzer import BodyFatAnalyzer
-            bf_analyzer = BodyFatAnalyzer(scaling_factor=200)
-            bf_result = bf_analyzer.analyze_pose(landmarks, gender=gender)
+        # --- Gender & Body Fat ---
+        gender = GenderHeuristicPredictor().predict(measurements)
+        bf_result = BodyFatAnalyzer(scaling_factor=200).analyze_pose(landmarks, gender=gender)
 
-            print("[CameraPage] Predicted Gender:", gender)
-            print("[CameraPage] Body Fat %:", bf_result["body_fat_percent"])
-            print("[CameraPage] Category:", bf_result["category"])
+        # --- Student info ---
+        student_id = self.student_form.get_student_id()
+        student_info = {
+            "name": self.student_form.get_name(),
+            "age": self.student_form.get_age(),
+            "gender": gender,
+            "student_id": student_id,
+            "lrn": self.student_form.get_lrn(),
+            "email": self.student_form.get_email(),
+            "grade_name": self.student_form.get_grade_name(),
+            "section_name": self.student_form.get_section_name()
+        }
 
-            # --- Save images ---
-            os.makedirs("captures/raw", exist_ok=True)
-            raw_filename = datetime.now().strftime("captures/raw/raw_%Y%m%d_%H%M%S.png")
-            cv2.imwrite(raw_filename, raw_image)
+        # --- Save folder & images ---
+        student_folder = os.path.join("captures", student_id)
+        os.makedirs(student_folder, exist_ok=True)
 
-            os.makedirs("captures/processed", exist_ok=True)
-            processed_filename = datetime.now().strftime("captures/processed/processed_%Y%m%d_%H%M%S.png")
-            cv2.imwrite(processed_filename, annotated_image)
+        raw_filename = os.path.join(student_folder, f"raw_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        cv2.imwrite(raw_filename, raw_image)
 
-            pdf_gen = PDFReportGenerator()
-            student_info = {
-                "name": self.student_form.get_name(),
-                "age": self.student_form.get_age(),
-                "gender": gender,
-                "student_id": self.student_form.get_student_id(),
-                "lrn": self.student_form.get_lrn(),
-                'email': self.student_form.get_email(),
-                "grade_name": self.student_form.get_grade_name(),
-                "section_name": self.student_form.get_section_name()
-            }
+        processed_filename = os.path.join(student_folder, f"processed_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        cv2.imwrite(processed_filename, annotated_image)
 
-            pdf_path = pdf_gen.generate_report(
-                student_info, 
-                bf_result, 
-                raw_image_path=raw_filename,
-                annotated_image_path=processed_filename
-            )
-            print("PDF generated at:", pdf_path)
+        # --- Generate PDF ---
+        pdf_path = PDFReportGenerator(base_output_dir="captures").generate_report(
+            student_info, bf_result, raw_image_path=raw_filename, annotated_image_path=processed_filename
+        )
 
-            # --- Optionally save measurements & BF% to a CSV or Excel ---
-            os.makedirs("captures/results", exist_ok=True)
-            results_file = "captures/results/bodyfat_results.csv"
-            import csv
-
-            file_exists = os.path.isfile(results_file)
-            with open(results_file, mode="a", newline="") as f:
-                writer = csv.writer(f)
-                if not file_exists:
-                    writer.writerow([
-                        "Timestamp", "Gender", "Body Fat %", "Category",
-                        "Waist (cm)", "Hip (cm)", "Neck (cm)", "Chest (cm)", "Height (cm)"
-                    ])
+        # --- Save CSV result ---
+        results_file = os.path.join(student_folder, "bodyfat_results.csv")
+        import csv
+        file_exists = os.path.isfile(results_file)
+        with open(results_file, mode="a", newline="") as f:
+            writer = csv.writer(f)
+            if not file_exists:
                 writer.writerow([
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    gender,
-                    round(bf_result["body_fat_percent"], 2),
-                    bf_result["category"],
-                    round(bf_result["measurements"]["Waist Circumference (cm)"], 2),
-                    round(bf_result["measurements"]["Hip Circumference (cm)"], 2),
-                    round(bf_result["measurements"]["Neck Circumference (cm)"], 2),
-                    round(bf_result["measurements"]["Chest Circumference (cm)"], 2),
-                    round(bf_result["measurements"]["Estimated Height (cm)"], 2)
+                    "Timestamp", "Gender", "Body Fat %", "Category",
+                    "Waist (cm)", "Hip (cm)", "Neck (cm)", "Chest (cm)", "Height (cm)"
                 ])
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                gender,
+                round(bf_result["body_fat_percent"], 2),
+                bf_result["category"],
+                round(bf_result["measurements"]["Waist Circumference (cm)"], 2),
+                round(bf_result["measurements"]["Hip Circumference (cm)"], 2),
+                round(bf_result["measurements"]["Neck Circumference (cm)"], 2),
+                round(bf_result["measurements"]["Chest Circumference (cm)"], 2),
+                round(bf_result["measurements"]["Estimated Height (cm)"], 2)
+            ])
 
-            print("[CameraPage] Raw saved:", raw_filename)
-            print("[CameraPage] Processed saved:", processed_filename)
-            print("[CameraPage] Results saved to:", results_file)
+        print("[CameraPage] Saved images, PDF, and CSV in folder:", student_folder)
+
+        # --- Navigate to ResultPage ---
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        ResultPage(
+            self.root,
+            theme=self.theme,
+            student_info=student_info,
+            analysis_result=bf_result,
+            raw_image_path=raw_filename,
+            annotated_image_path=processed_filename,
+            back_callback=self.reset_page
+        )
+
+    def reset_page(self):
+        # destroy everything
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        # re-initialize CameraPage
+        CameraPage(self.root, self.theme, self.camera_config)
 
     # ------------------------------
     def close(self):
