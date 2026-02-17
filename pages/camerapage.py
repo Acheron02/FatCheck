@@ -1,11 +1,14 @@
-# pages/camerapage.py
 import tkinter as tk
 from PIL import Image, ImageTk
 import cv2
 import os
 from datetime import datetime
 from frontend.roundedButton import RoundedButton
-from frontend.studentForm import StudentForm  # import the form
+from frontend.studentForm import StudentForm
+from backend.gender_detector import GenderHeuristicPredictor
+from backend.pose_analyzer import PoseAnalyzer
+from backend.bodyfat_analyzer import BodyFatAnalyzer
+from backend.util.report_generator import PDFReportGenerator
 
 class CameraPage:
     def __init__(self, root, theme, camera_config):
@@ -13,49 +16,62 @@ class CameraPage:
         self.theme = theme
         self.camera_config = camera_config
 
-        # --- Set root background ---
         self.root.configure(bg=self.theme["zinc-950"])
-        self.root.update_idletasks()
+
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
 
+        self.pose_analyzer = PoseAnalyzer()
+
         # --- Frames ---
-        self.left_frame = tk.Frame(self.root, width=screen_width // 2, height=screen_height, bg="black")
-        self.left_frame.pack(side="left", fill="both", expand=False)
+        # Make camera 50% width, form 50% width
+        camera_width = screen_width // 2
+        form_width = screen_width - camera_width
 
-        self.right_frame = tk.Frame(self.root, width=screen_width // 2, height=screen_height, bg=self.theme["zinc-950"])
-        self.right_frame.pack(side="right", fill="both", expand=True)
+        self.left_frame = tk.Frame(self.root, width=camera_width, height=screen_height, bg="black")
+        self.left_frame.pack(side="left", fill="both", expand=True)
 
-        # --- Canvas for camera feed ---
-        self.canvas = tk.Canvas(self.left_frame, width=screen_width // 2, height=screen_height, bg="black", highlightthickness=0)
+        self.right_frame = tk.Frame(self.root, width=form_width, height=screen_height, bg=self.theme["zinc-950"])
+        self.right_frame.pack(side="left", fill="both", expand=True)
+
+        # --- Camera canvas ---
+        self.canvas = tk.Canvas(self.left_frame, bg="black", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
 
         # --- Video capture ---
         self.cap = cv2.VideoCapture(0)
-        max_width = min(self.camera_config.get("resolution_width", 1280), 1920)
-        max_height = min(self.camera_config.get("resolution_height", 1080), 1080)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, max_width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, max_height)
+
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1280)
         self.cap.set(cv2.CAP_PROP_FPS, 60)
 
-        self.cam_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.cam_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.cam_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        print(f"Camera opened at {self.cam_width}x{self.cam_height} @ {self.cam_fps} FPS")
+        # Reduce internal camera buffer (important for smooth motion)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        # Get actual FPS camera accepted
+        self.cam_fps = self.cap.get(cv2.CAP_PROP_FPS)
+
+        if not self.cam_fps or self.cam_fps < 1:
+            self.cam_fps = 30  # safe fallback
+
+        print(f"[CameraPage] Running at {self.cam_fps} FPS")
+
+        # Calculate proper delay
+        self.frame_delay = int(1000 / self.cam_fps)
+
 
         self.imgtk = None
-        self.canvas_image = self.canvas.create_image(0, 0, anchor="nw")
+        self.canvas_image = self.canvas.create_image(0, 0, anchor="center")
+        self.canvas.bind("<Configure>", self.on_canvas_resize)
         self.last_frame_full_res = None
 
-        # ==================================================
-        # Right frame layout (3 rows using grid)
-        # ==================================================
-        self.right_frame.grid_rowconfigure(0, weight=0)  # Page title row
-        self.right_frame.grid_rowconfigure(1, weight=1)  # Form wrapper row (expandable)
-        self.right_frame.grid_rowconfigure(2, weight=0)  # Capture button row
+        # --- Layout ---
+        self.right_frame.grid_rowconfigure(0, weight=0)
+        self.right_frame.grid_rowconfigure(1, weight=1)
+        self.right_frame.grid_rowconfigure(2, weight=0)
         self.right_frame.grid_columnconfigure(0, weight=1)
 
-        # --- Page title ---
+        # --- Title ---
         self.page_title = tk.Label(
             self.right_frame,
             text="Camera Capture",
@@ -63,30 +79,26 @@ class CameraPage:
             bg=self.theme["zinc-950"],
             fg=self.theme["zinc-100"]
         )
-        self.page_title.grid(row=0, column=0, pady=(20,10), sticky="n")
+        self.page_title.grid(row=0, column=0, pady=(20,0), padx=20)
 
-        # --- Form wrapper for centering ---
+        # --- Form wrapper ---
         form_wrapper = tk.Frame(self.right_frame, bg=self.theme["zinc-950"])
-        form_wrapper.grid(row=1, column=0, sticky="nsew")
+        form_wrapper.grid(row=1, column=0, sticky="nsew", padx=20)
         form_wrapper.grid_rowconfigure(0, weight=1)
         form_wrapper.grid_columnconfigure(0, weight=1)
 
-        # --- Student form ---
+        # --- Student Form ---
         self.student_form = StudentForm(
             form_wrapper,
             theme=self.theme,
-            text_sizes={"md":28, "sm":24, "xsm":12, "l":35},
-            student_data={
-                "name": "Juan Dela Cruz",
-                "student_id": "Enter Student ID",
-                "lrn": "123456789012",
-                "email": "juan.delacruz@example.com"
-            },
-            submit_callback=self.on_form_submit
+            text_sizes={"md": 28, "sm": 24, "xsm": 12, "l": 35},
+            submit_callback=None,
+            on_student_fetched=lambda data: self.capture_btn.config_state("normal"),
+            on_reset=lambda: self.capture_btn.config_state("disabled")
         )
-        self.student_form.container.grid(row=0, column=0, padx=20, pady=10, sticky="")
+        self.student_form.container.grid(row=0, column=0, sticky="n", pady=10)
 
-        # --- Capture button (disabled by default) ---
+        # --- Capture Button ---
         self.capture_btn = RoundedButton(
             self.right_frame,
             text="Capture Image",
@@ -94,79 +106,119 @@ class CameraPage:
             width=200,
             height=60
         )
-        self.capture_btn.grid(row=2, column=0, pady=20, sticky="s")
-        self.capture_btn.config(state="disabled")  # initially disabled
-
-        # --- Bind student ID field to update capture button ---
-        student_id_input = self.student_form.fields["Student ID:"].entry
-        student_id_input.bind("<KeyRelease>", self._check_capture_state)
-        # Also check immediately in case it's pre-filled
-        self._check_capture_state()
+        self.capture_btn.grid(row=2, column=0, pady=20, padx=20)
+        self.capture_btn.config_state("disabled")  # initially disabled
 
         # --- Start video loop ---
         self.update_frame()
 
-        # --- Bind Esc to close ---
-        self.root.bind("<Escape>", lambda e: self.close())
+    # ------------------------------
+    def on_canvas_resize(self, event):
+        canvas_width = event.width
+        canvas_height = event.height
+        self.canvas.coords(self.canvas_image, canvas_width // 2, canvas_height // 2)
 
-    # --------------------------------------------------
-    def _check_capture_state(self, event=None):
-        student_input = self.student_form.fields["Student ID:"]
-        student_id = student_input.get()
-        if not getattr(student_input.entry, "is_placeholder", True) and student_id.strip():
-            self.capture_btn.config_state("normal")
-        else:
-            self.capture_btn.config_state("disabled")
-
-    # --------------------------------------------------
-    def on_form_submit(self, student_id):
-        print("Student ID submitted:", student_id)
-        self._check_capture_state()  # re-check capture button state
-
-    # --------------------------------------------------
+    # ------------------------------
     def update_frame(self):
         if self.cap.isOpened():
             ret, frame = self.cap.read()
+
             if ret:
                 self.last_frame_full_res = frame.copy()
+
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frame_height, frame_width = frame_rgb.shape[:2]
+                img = ImageTk.PhotoImage(image=Image.fromarray(frame_rgb))
 
-                canvas_width = max(self.left_frame.winfo_width(), 1)
-                canvas_height = max(self.left_frame.winfo_height(), 1)
-                scale = canvas_height / frame_height
-                new_width = max(int(frame_width * scale), 1)
-                new_height = canvas_height
-
-                frame_resized = cv2.resize(frame_rgb, (new_width, new_height))
-                img = ImageTk.PhotoImage(image=Image.fromarray(frame_resized))
                 self.imgtk = img
-
-                x_center = (canvas_width - new_width) // 2
-                self.canvas.coords(self.canvas_image, x_center, 0)
                 self.canvas.itemconfig(self.canvas_image, image=self.imgtk)
-        else:
-            print("Error: Camera not opened.")
 
-        delay = max(int(1000 / self.cam_fps), 15)
-        self.root.after(delay, self.update_frame)
+        self.root.after(self.frame_delay, self.update_frame)
 
-    # --------------------------------------------------
+
+    # ------------------------------
     def capture_image(self):
         if self.last_frame_full_res is not None:
-            frame_rgb = cv2.cvtColor(self.last_frame_full_res, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(frame_rgb)
+            raw_image = self.last_frame_full_res.copy()
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            save_dir = "captures"
-            os.makedirs(save_dir, exist_ok=True)
-            file_path = os.path.join(save_dir, f"capture_{timestamp}.png")
-            img.save(file_path)
-            print(f"Image captured at full resolution: {file_path}")
-        else:
-            print("Warning: No frame available to capture.")
+            # --- Pose analysis ---
+            annotated_image, measurements, landmarks = self.pose_analyzer.analyze_image(raw_image)
 
-    # --------------------------------------------------
+            if not measurements:
+                print("[CameraPage] No pose detected. Skipping capture.")
+                return
+
+            # --- Predict gender using heuristics ---
+            predictor = GenderHeuristicPredictor()
+            gender = predictor.predict(measurements)
+
+            # --- Estimate BF% using BodyFatAnalyzer ---
+            from backend.bodyfat_analyzer import BodyFatAnalyzer
+            bf_analyzer = BodyFatAnalyzer(scaling_factor=200)
+            bf_result = bf_analyzer.analyze_pose(landmarks, gender=gender)
+
+            print("[CameraPage] Predicted Gender:", gender)
+            print("[CameraPage] Body Fat %:", bf_result["body_fat_percent"])
+            print("[CameraPage] Category:", bf_result["category"])
+
+            # --- Save images ---
+            os.makedirs("captures/raw", exist_ok=True)
+            raw_filename = datetime.now().strftime("captures/raw/raw_%Y%m%d_%H%M%S.png")
+            cv2.imwrite(raw_filename, raw_image)
+
+            os.makedirs("captures/processed", exist_ok=True)
+            processed_filename = datetime.now().strftime("captures/processed/processed_%Y%m%d_%H%M%S.png")
+            cv2.imwrite(processed_filename, annotated_image)
+
+            pdf_gen = PDFReportGenerator()
+            student_info = {
+                "name": self.student_form.get_name(),
+                "age": self.student_form.get_age(),
+                "gender": gender,
+                "student_id": self.student_form.get_student_id(),
+                "lrn": self.student_form.get_lrn(),
+                'email': self.student_form.get_email(),
+                "grade_name": self.student_form.get_grade_name(),
+                "section_name": self.student_form.get_section_name()
+            }
+
+            pdf_path = pdf_gen.generate_report(
+                student_info, 
+                bf_result, 
+                raw_image_path=raw_filename,
+                annotated_image_path=processed_filename
+            )
+            print("PDF generated at:", pdf_path)
+
+            # --- Optionally save measurements & BF% to a CSV or Excel ---
+            os.makedirs("captures/results", exist_ok=True)
+            results_file = "captures/results/bodyfat_results.csv"
+            import csv
+
+            file_exists = os.path.isfile(results_file)
+            with open(results_file, mode="a", newline="") as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow([
+                        "Timestamp", "Gender", "Body Fat %", "Category",
+                        "Waist (cm)", "Hip (cm)", "Neck (cm)", "Chest (cm)", "Height (cm)"
+                    ])
+                writer.writerow([
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    gender,
+                    round(bf_result["body_fat_percent"], 2),
+                    bf_result["category"],
+                    round(bf_result["measurements"]["Waist Circumference (cm)"], 2),
+                    round(bf_result["measurements"]["Hip Circumference (cm)"], 2),
+                    round(bf_result["measurements"]["Neck Circumference (cm)"], 2),
+                    round(bf_result["measurements"]["Chest Circumference (cm)"], 2),
+                    round(bf_result["measurements"]["Estimated Height (cm)"], 2)
+                ])
+
+            print("[CameraPage] Raw saved:", raw_filename)
+            print("[CameraPage] Processed saved:", processed_filename)
+            print("[CameraPage] Results saved to:", results_file)
+
+    # ------------------------------
     def close(self):
         if self.cap.isOpened():
             self.cap.release()
