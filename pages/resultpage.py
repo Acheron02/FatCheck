@@ -52,43 +52,27 @@ class ResultPage:
         self.right_frame.pack(side="left", fill="both", expand=True)
 
         # ==============================
-        # LEFT SIDE — IMAGES
+        # LEFT SIDE — IMAGES (fixed layout)
         # ==============================
 
-        self.raw_canvas = tk.Canvas(
-            self.left_frame,
-            bg="black",
-            highlightthickness=0
-        )
-        self.raw_canvas.pack(fill="both", expand=True, padx=10, pady=(20, 5))
+        # Wrap both canvases in a parent frame
+        self.images_frame = tk.Frame(self.left_frame, bg=self.theme["zinc-950"])
+        self.images_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Caption 1
-        tk.Label(
-            self.left_frame,
-            text="Figure 1. Raw Image",
-            font=(self.theme["description"], 14, "italic"),
-            bg=self.theme["zinc-950"],
-            fg=self.theme["zinc-100"]
-        ).pack(pady=(0, 10))
+        # Split parent frame into two equal-height frames
+        self.raw_frame = tk.Frame(self.images_frame, bg="black")
+        self.raw_frame.pack(side="top", fill="both", expand=True, pady=(0,5))
 
-        self.annotated_canvas = tk.Canvas(
-            self.left_frame,
-            bg="black",
-            highlightthickness=0
-        )
-        self.annotated_canvas.pack(fill="both", expand=True, padx=10, pady=(10, 5))
+        self.annotated_frame = tk.Frame(self.images_frame, bg="black")
+        self.annotated_frame.pack(side="top", fill="both", expand=True, pady=(5,0))
 
-        # Caption 2
-        tk.Label(
-            self.left_frame,
-            text="Figure 2. Processed Image",
-            font=(self.theme["description"], 14, "italic"),
-            bg=self.theme["zinc-950"],
-            fg=self.theme["zinc-100"]
-        ).pack(pady=(0, 20))
+        # Canvas for raw image
+        self.raw_canvas = tk.Canvas(self.raw_frame, bg="black", highlightthickness=0)
+        self.raw_canvas.pack(fill="both", expand=True)
 
-        # Load images after layout stabilizes
-        self.root.after(100, self.load_images)
+        # Canvas for annotated image
+        self.annotated_canvas = tk.Canvas(self.annotated_frame, bg="black", highlightthickness=0)
+        self.annotated_canvas.pack(fill="both", expand=True)
 
         # ==============================
         # RIGHT SIDE — RESULTS
@@ -207,11 +191,18 @@ class ResultPage:
         )
         self.back_btn.pack()
 
+        # Load images after layout stabilizes
+        self.root.after_idle(self.load_images)
+
+        # Optional: make images resize when window resizes
+        self.left_frame.bind("<Configure>", lambda e: self.load_images())
+
     # ==============================
     # IMAGE LOADING
     # ==============================
 
     def load_images(self):
+        # Strong references on self
         self.raw_imgtk = self._load_image_on_canvas(
             self.raw_image_path,
             self.raw_canvas
@@ -223,27 +214,47 @@ class ResultPage:
 
     def _load_image_on_canvas(self, path, canvas):
         if not os.path.exists(path):
+            print(f"[ResultPage] Image not found: {path}")
             return None
 
         canvas.update_idletasks()
-        canvas_width = canvas.winfo_width() or 400
-        canvas_height = canvas.winfo_height() or 400
+        canvas_width = canvas.winfo_width()
+        canvas_height = canvas.winfo_height()
+
+        # ⚠️ Guard against zero size
+        if canvas_width <= 0 or canvas_height <= 0:
+            # Schedule a retry after 50ms
+            self.root.after(50, lambda: self._load_image_on_canvas(path, canvas))
+            return None
 
         img = Image.open(path)
-        img.thumbnail((canvas_width, canvas_height))
+        img_ratio = img.width / img.height
+        canvas_ratio = canvas_width / canvas_height
+
+        if img_ratio > canvas_ratio:
+            new_width = canvas_width
+            new_height = int(canvas_width / img_ratio)
+        else:
+            new_height = canvas_height
+            new_width = int(canvas_height * img_ratio)
+
+        # ⚠️ Ensure dimensions are positive integers
+        new_width = max(1, new_width)
+        new_height = max(1, new_height)
+
+        img = img.resize((new_width, new_height), Image.LANCZOS)
         imgtk = ImageTk.PhotoImage(img)
 
+        # Keep strong references
         if not hasattr(canvas, "image_refs"):
             canvas.image_refs = []
         canvas.image_refs.append(imgtk)
+        if not hasattr(self, "canvas_images"):
+            self.canvas_images = []
+        self.canvas_images.append(imgtk)
 
-        canvas.create_image(
-            canvas_width // 2,
-            canvas_height // 2,
-            image=imgtk,
-            anchor="center"
-        )
-
+        canvas.delete("all")
+        canvas.create_image(canvas_width // 2, canvas_height // 2, image=imgtk, anchor="center")
         return imgtk
 
     # ==============================

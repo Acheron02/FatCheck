@@ -2,7 +2,7 @@
 import tkinter as tk
 from PIL import Image, ImageTk
 import os
-from pages.camerapage import CameraPage
+from pages.calibration_prompt_page import CalibrationPromptPage
 
 class WelcomePage:
     def __init__(self, root, theme, text_sizes, camera_config):
@@ -82,5 +82,5 @@ class WelcomePage:
         # Clear canvas
         self.canvas.destroy()
 
-        # Initialize camera page
-        CameraPage(self.root, self.theme, self.camera_config)
+        # Initialize calibration page
+        CalibrationPromptPage(self.root, self.theme, self.camera_config)

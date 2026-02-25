@@ -143,12 +143,13 @@ class OnScreenKeyboard:
     def _check_entry_click(self, event):
         widget = event.widget
 
+        # Only proceed if widget has 'master' (ignore strings etc.)
+        if not hasattr(widget, "master"):
+            return
+
         # Ignore clicks inside the keyboard itself
-        parent = widget
-        while parent:
-            if parent == self.window:
-                return
-            parent = parent.master
+        if self._is_child_of(widget, self.window):
+            return
 
         # If clicked on an entry, make it active and show keyboard
         if isinstance(widget, tk.Entry):
@@ -161,5 +162,10 @@ class OnScreenKeyboard:
         while widget:
             if widget == parent:
                 return True
-            widget = widget.master
+            widget = getattr(widget, "master", None)
         return False
+
+    def close(self):
+        if self.window is not None:
+            self.window.destroy()
+            self.window = None

@@ -20,5 +20,5 @@ def fetch_student_by_id(student_id=None, lrn=None):
             print(f"[fetch_student_by_id] Student not found: {value}")
             return None
     except requests.RequestException as e:
-        print("[fetch_student_by_id] API Error:", e)
+        print("[fetch_student_by_id] API Error:", e, flush=True)
         return None

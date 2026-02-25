@@ -28,6 +28,13 @@
   },
   "camera": {
     "resolution_width": 1980,
-    "resolution_height": 1080
+    "resolution_height": 1080,
+    "ruler_cm_height": 7.0
+  },
+  "CATEGORY_PROGRAMS": {
+    "Underfat": "School Feeding Program / Nutritional Support",
+    "Healthy": "Maintain Balanced Diet & Physical Activity",
+    "Overfat": "Active Lifestyle & Nutrition Education Program",
+    "Obese": "Structured Weight Management Program with Pediatric Guidance"
   }
 }

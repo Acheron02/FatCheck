@@ -9,7 +9,7 @@ class PoseAnalyzer:
 
         self.pose = self.mp_pose.Pose(
             static_image_mode=True,
-            model_complexity=1,
+            model_complexity=2,
             enable_segmentation=False,
             min_detection_confidence=0.5
         )
@@ -22,7 +22,7 @@ class PoseAnalyzer:
         landmarks = None
 
         if results.pose_landmarks:
-            landmarks = results.pose_landmarks.landmark  # <-- return this
+            landmarks = results.pose_landmarks.landmark
             # Shoulders, hips, etc.
             left_shoulder = landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER]
             right_shoulder = landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER]
@@ -34,25 +34,8 @@ class PoseAnalyzer:
             right_elbow = landmarks[self.mp_pose.PoseLandmark.RIGHT_ELBOW]
             left_wrist = landmarks[self.mp_pose.PoseLandmark.LEFT_WRIST]
             right_wrist = landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST]
-
-            torso_height = abs(left_shoulder.y - left_hip.y)
-            shoulder_width = abs(left_shoulder.x - right_shoulder.x) / torso_height
-            hip_width = abs(left_hip.x - right_hip.x) / torso_height
-            left_arm = np.linalg.norm([left_shoulder.x-left_elbow.x, left_shoulder.y-left_elbow.y]) / torso_height
-            right_arm = np.linalg.norm([right_shoulder.x-right_elbow.x, right_shoulder.y-right_elbow.y]) / torso_height
-            left_leg = np.linalg.norm([left_hip.x-left_knee.x, left_hip.y-left_knee.y]) / torso_height
-            right_leg = np.linalg.norm([right_hip.x-right_knee.x, right_hip.y-right_knee.y]) / torso_height
-
-            measurements = {
-                "shoulder_width": shoulder_width,
-                "hip_width": hip_width,
-                "torso_height": torso_height,
-                "left_arm": left_arm,
-                "right_arm": right_arm,
-                "left_leg": left_leg,
-                "right_leg": right_leg,
-                "waist_width": hip_width * 0.9
-            }
+            l_ear = landmarks[self.mp_pose.PoseLandmark.LEFT_EAR]
+            r_ear = landmarks[self.mp_pose.PoseLandmark.RIGHT_EAR]
 
             annotated = image_bgr.copy()
             self.mp_drawing.draw_landmarks(
@@ -60,7 +43,6 @@ class PoseAnalyzer:
                 results.pose_landmarks,
                 self.mp_pose.POSE_CONNECTIONS
             )
-            return annotated, measurements, landmarks  # <-- return 3 values
-
-        return image_bgr, measurements, landmarks
+            return annotated, {}, landmarks
+        return image_bgr, {}, landmarks
 

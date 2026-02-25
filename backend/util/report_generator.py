@@ -1,5 +1,6 @@
 # report_generator.py
 import os
+import json
 from datetime import datetime
 from PIL import Image
 from reportlab.lib.pagesizes import A4
@@ -37,22 +38,18 @@ class PDFReportGenerator:
             alignment=1  # center
         )
 
-    def generate_report(self, student_info: dict, analysis_result: dict, raw_image_path: str, annotated_image_path: str):
-        student_id = student_info.get("student_id") or "Unknown"
-
-        # --- Create student folder ---
-        student_folder = os.path.join(self.base_output_dir, student_id)
-        os.makedirs(student_folder, exist_ok=True)
+    def generate_report(self, student_info: dict, analysis_result: dict,
+                    raw_image_path: str, annotated_image_path: str):
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        pdf_path = os.path.join(student_folder, f"report_{timestamp}.pdf")
 
-        # Optional: also move images to the same folder
-        raw_dest = os.path.join(student_folder, os.path.basename(raw_image_path))
-        annotated_dest = os.path.join(student_folder, os.path.basename(annotated_image_path))
-        os.replace(raw_image_path, raw_dest)
-        os.replace(annotated_image_path, annotated_dest)
+        # Define the PDF file path in the folder passed via base_output_dir
+        pdf_path = os.path.join(self.base_output_dir, f"report_{timestamp}.pdf")
 
+        raw_dest = raw_image_path
+        annotated_dest = annotated_image_path
+
+        # Now we can safely create the canvas
         c = canvas.Canvas(pdf_path, pagesize=A4)
         width, height = A4
         margin = 50
@@ -188,6 +185,30 @@ class PDFReportGenerator:
         c.setFont("Helvetica-Oblique", 10)
         c.drawRightString(width - margin, 30, f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         c.save()
+
+        # --- Save metadata JSON ---
+        metadata = {
+            "timestamp": timestamp,
+            "student_id": student_info.get("student_id"),  # use student_info
+            "name": student_info.get("name"),
+            "age": student_info.get("age"),
+            "gender": student_info.get("gender"),
+            "grade_name": student_info.get("grade_name"),
+            "section_name": student_info.get("section_name"),
+            "body_fat_percent": round(analysis_result.get("body_fat_percent", 0)),
+            "category": analysis_result.get("category"),
+            "measurements": analysis_result.get("measurements"),
+            "pdf_filename": os.path.basename(pdf_path),
+            "raw_image": os.path.basename(raw_image_path),
+            "annotated_image": os.path.basename(annotated_image_path)
+        }
+
+        json_path = os.path.join(self.base_output_dir, f"metadata_{timestamp}.json")
+        with open(json_path, "w") as f:
+            json.dump(metadata, f, indent=4)
+
         print(f"[PDFReportGenerator] Report saved to {pdf_path}")
-        return pdf_path
+        print(f"[PDFReportGenerator] Metadata saved to {json_path}")
+
+        return pdf_path, json_path
 

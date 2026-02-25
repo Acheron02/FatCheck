@@ -10,7 +10,8 @@ import signal
 
 class StudentForm:
     def __init__(self, root, theme, text_sizes, submit_callback=None, 
-                 on_student_fetched=None, on_reset=None):
+             on_student_fetched=None, on_reset=None,
+             on_fetch_error=None):
         self.root = root
         self.theme = theme
         self.text_sizes = text_sizes
@@ -19,6 +20,7 @@ class StudentForm:
         self.on_reset = on_reset
         self._grade_name = None
         self._section_name = None
+        self.on_fetch_error = on_fetch_error
 
 
         # Default placeholders
@@ -143,6 +145,8 @@ class StudentForm:
 
     # ------------------------------
     def update_student_data(self, data: dict):
+        self._mongo_id = data.get("_id")
+        self._sex = data.get("sex")
         self.fields["Name:"].set_value(data.get("name", self.placeholders["Name:"]))
         self.fields["Age:"].set_value(str(data.get("age", self.placeholders["Age:"])))
         self.fields["Email:"].set_value(data.get("email", self.placeholders["Email:"]))
@@ -188,17 +192,35 @@ class StudentForm:
         if not student_id and not lrn:
             return
 
-        data = fetch_student_by_id(student_id=student_id, lrn=lrn)
-        if data:
-            self.update_student_data(data)
-            # Store grade & section internally
-            self._grade_name = data.get("grade_name")
-            self._section_name = data.get("section_name")
-            if self.on_student_fetched:
-                self.on_student_fetched(data)
-        else:
-            print(f"No student found with Student ID: {student_id} or LRN: {lrn}")
+        try:
+            data = fetch_student_by_id(student_id=student_id, lrn=lrn)
 
+            if data:
+                # Switch back to main thread safely
+                self.root.after(0, lambda: self._handle_fetch_success(data))
+            else:
+                self.root.after(0, lambda: self._handle_fetch_error(
+                    "No student found with the provided Student ID or LRN."
+                ))
+
+        except Exception as e:
+            self.root.after(0, lambda: self._handle_fetch_error(
+                "Failed to fetch student data.\nPlease try again."
+            ))
+
+    def _handle_fetch_success(self, data):
+        self.update_student_data(data)
+
+        self._grade_name = data.get("grade_name")
+        self._section_name = data.get("section_name")
+
+        if self.on_student_fetched:
+            self.on_student_fetched(data)
+
+
+    def _handle_fetch_error(self, message):
+        if self.on_fetch_error:
+            self.on_fetch_error(message)
 
     # ------------------------------
     def get_focused_editable(self):
@@ -236,3 +258,8 @@ class StudentForm:
     def get_section_name(self):
         return self._section_name or "N/A"
 
+    def get_mongo_id(self):
+        return getattr(self, "_mongo_id", None)
+
+    def get_sex(self):
+        return getattr(self, "_sex", None)
