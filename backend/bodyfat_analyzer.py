@@ -114,32 +114,32 @@ class BodyFatAnalyzer:
     # CLASSIFICATION TABLES
     # -------------------------------------------------------
     MALE_TABLE = {
-        "5-17":  {"underfat": (0, 9), "standard_minus": (9.01, 17),
-                  "standard_plus": (17.01, 26), "overfat": (26.01, 31),
+        "5-17":  {"underfat": (0, 9), "average_standard_minus": (9.01, 17),
+                  "average_standard_plus": (17.01, 26), "overfat": (26.01, 31),
                   "obese": (31.01, 100)},
-        "18-39": {"underfat": (0, 12), "standard_minus": (12.01, 18),
-                  "standard_plus": (18.01, 23), "overfat": (23.01, 28),
+        "18-39": {"underfat": (0, 12), "average_standard_minus": (12.01, 18),
+                  "average_standard_plus": (18.01, 23), "overfat": (23.01, 28),
                   "obese": (28.01, 100)},
-        "40-59": {"underfat": (0, 13), "standard_minus": (13.01, 19),
-                  "standard_plus": (19.01, 24), "overfat": (24.01, 29),
+        "40-59": {"underfat": (0, 13), "average_standard_minus": (13.01, 19),
+                  "average_standard_plus": (19.01, 24), "overfat": (24.01, 29),
                   "obese": (29.01, 100)},
-        "60+":   {"underfat": (0, 15), "standard_minus": (15.01, 21),
-                  "standard_plus": (21.01, 26), "overfat": (26.01, 31),
+        "60+":   {"underfat": (0, 15), "average_standard_minus": (15.01, 21),
+                  "average_standard_plus": (21.01, 26), "overfat": (26.01, 31),
                   "obese": (31.01, 100)},
     }
 
     FEMALE_TABLE = {
-        "5-17":  {"underfat": (0, 12), "standard_minus": (12.01, 21),
-                  "standard_plus": (21.01, 30), "overfat": (30.01, 34),
+        "5-17":  {"underfat": (0, 12), "average_standard_minus": (12.01, 21),
+                  "average_standard_plus": (21.01, 30), "overfat": (30.01, 34),
                   "obese": (34.01, 100)},
-        "18-39": {"underfat": (0, 20), "standard_minus": (20.01, 27),
-                  "standard_plus": (27.01, 34), "overfat": (34.01, 39),
+        "18-39": {"underfat": (0, 20), "average_standard_minus": (20.01, 27),
+                  "average_standard_plus": (27.01, 34), "overfat": (34.01, 39),
                   "obese": (39.01, 100)},
-        "40-59": {"underfat": (0, 21), "standard_minus": (21.01, 28),
-                  "standard_plus": (28.01, 35), "overfat": (35.01, 40),
+        "40-59": {"underfat": (0, 21), "average_standard_minus": (21.01, 28),
+                  "average_standard_plus": (28.01, 35), "overfat": (35.01, 40),
                   "obese": (40.01, 100)},
-        "60+":   {"underfat": (0, 22), "standard_minus": (22.01, 29),
-                  "standard_plus": (29.01, 36), "overfat": (36.01, 41),
+        "60+":   {"underfat": (0, 22), "average_standard_minus": (22.01, 29),
+                  "average_standard_plus": (29.01, 36), "overfat": (36.01, 41),
                   "obese": (41.01, 100)},
     }
 
