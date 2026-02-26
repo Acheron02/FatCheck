@@ -38,7 +38,8 @@ class CameraPage:
         form_width = screen_width - camera_width
 
         self.left_frame = tk.Frame(self.root, width=camera_width, height=screen_height, bg="black")
-        self.left_frame.pack(side="left", fill="both", expand=True)
+        self.left_frame.pack(side="left", fill="y")
+        self.left_frame.pack_propagate(False)
 
         self.right_frame = tk.Frame(self.root, width=form_width, height=screen_height, bg=self.theme["zinc-950"])
         self.right_frame.pack(side="left", fill="both", expand=True)
@@ -60,15 +61,37 @@ class CameraPage:
         self.last_frame_full_res = None
         self.update_loop_id = None
 
-        # ---------------- FORM ----------------
-        self.page_title = tk.Label(
+        # ---------------- HEADER (Title + Recalibrate) ----------------
+        self.header_frame = tk.Frame(
             self.right_frame,
+            bg=self.theme["zinc-950"]
+        )
+        self.header_frame.pack(fill="x", pady=(30, 20), padx=40)
+
+        # Inner wrapper to bring content slightly toward center
+        self.header_inner = tk.Frame(
+            self.header_frame,
+            bg=self.theme["zinc-950"]
+        )
+        self.header_inner.pack(anchor="center")
+
+        self.page_title = tk.Label(
+            self.header_inner,
             text="Camera Capture",
-            font=(self.theme["description"], 28, "bold"),
+            font=(self.theme["description"], 20, "bold"),
             bg=self.theme["zinc-950"],
             fg=self.theme["zinc-100"]
         )
-        self.page_title.pack(pady=(20, 10))
+        self.page_title.pack(side="left", padx=(20, 30), pady=5)
+
+        self.recalibrate_btn = RoundedButton(
+            self.header_inner,
+            text="Recalibrate",
+            command=self.go_to_calibration_prompt,
+            width=110,
+            height=42
+        )
+        self.recalibrate_btn.pack(side="left", padx=(0, 20), pady=10)
 
         self.student_form = StudentForm(
             self.right_frame,
@@ -79,7 +102,7 @@ class CameraPage:
             on_reset=self.on_student_reset,
             on_fetch_error=self.on_student_error
         )
-        self.student_form.container.pack(pady=10)
+        self.student_form.container.pack(pady=5)
 
         self.capture_btn = RoundedButton(
             self.right_frame,
@@ -198,6 +221,26 @@ class CameraPage:
 
         if auto_close_ms:
             self.root.after(auto_close_ms, self.close_error_dialog)
+    
+    # -------------------------------------------------
+    def go_to_calibration_prompt(self):
+        from pages.calibration_prompt_page import CalibrationPromptPage
+
+        # Stop update loop
+        if self.update_loop_id:
+            self.root.after_cancel(self.update_loop_id)
+            self.update_loop_id = None
+
+        # Release camera
+        if self.cap and self.cap.isOpened():
+            self.cap.release()
+
+        # Destroy current widgets
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Go back to calibration prompt page
+        CalibrationPromptPage(self.root, self.theme, self.camera_config)
 
     def close_error_dialog(self):
         if self.overlay:

@@ -39,7 +39,7 @@ class StudentForm:
 
         # Card settings
         card_width = 420
-        card_height = 400
+        card_height = 360
         radius = 16
         padding = 18
 
@@ -65,7 +65,7 @@ class StudentForm:
 
         # Header
         header = tk.Frame(self.frame, bg=self.theme["zinc-950"])
-        header.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,14))
+        header.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0,5))
         tk.Label(header, text="Search Student", font=self.title_font,
                  fg=self.theme["zinc-100"], bg=self.theme["zinc-950"]).grid(row=0,column=0,sticky="w")
 
@@ -93,7 +93,7 @@ class StudentForm:
             fg=self.theme["zinc-100"],
             font=self.button_font
         )
-        self.submit_btn.grid(row=6, column=0, columnspan=2, pady=(16,0))
+        self.submit_btn.grid(row=6, column=0, columnspan=2, pady=(5,0))
 
     # ------------------------------
     def create_field(self, label_text, placeholder, editable=False, row=0, reset_callback=None):

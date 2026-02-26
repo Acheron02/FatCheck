@@ -11,7 +11,7 @@ server_process = None
 
 def start_server():
     global server_process
-    uvicorn_path = "/home/jmc2/FatCheck/mp_env/bin/uvicorn"
+    uvicorn_path = "/home/adrian/FatCheck/venv/bin/uvicorn"
     server_process = subprocess.Popen(
         [
             uvicorn_path,
@@ -19,7 +19,7 @@ def start_server():
             "--host", "0.0.0.0",
             "--port", "8000"
         ],
-        cwd="/home/jmc2/FatCheck",
+        cwd="/home/adrian/FatCheck",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
